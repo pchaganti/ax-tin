@@ -48,6 +48,15 @@ type CommitPageData struct {
 	CodeHostURL *git.CodeHostURL
 }
 
+// ThreadPageData contains data for the thread detail page
+type ThreadPageData struct {
+	Title       string
+	RepoPath    string
+	RepoName    string
+	Thread      *model.Thread
+	CodeHostURL *git.CodeHostURL
+}
+
 // handleIndex handles the landing page showing all repositories
 func (s *WebServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
@@ -75,7 +84,7 @@ func (s *WebServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 // handleRepo routes repository requests to the appropriate handler
 func (s *WebServer) handleRepo(w http.ResponseWriter, r *http.Request) {
-	// Parse: /repo/{repo-path} or /repo/{repo-path}/commit/{id}
+	// Parse: /repo/{repo-path} or /repo/{repo-path}/commit/{id} or /repo/{repo-path}/thread/{id}
 	path := strings.TrimPrefix(r.URL.Path, "/repo/")
 	path = strings.TrimSuffix(path, "/")
 
@@ -84,6 +93,14 @@ func (s *WebServer) handleRepo(w http.ResponseWriter, r *http.Request) {
 		repoPath := path[:idx]
 		commitID := path[idx+8:]
 		s.handleCommit(w, r, repoPath, commitID)
+		return
+	}
+
+	// Check for /thread/ segment
+	if idx := strings.Index(path, "/thread/"); idx != -1 {
+		repoPath := path[:idx]
+		threadID := path[idx+8:]
+		s.handleThread(w, r, repoPath, threadID)
 		return
 	}
 
@@ -201,6 +218,42 @@ func (s *WebServer) handleCommit(w http.ResponseWriter, r *http.Request, repoPat
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := renderTemplate(w, "commit.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// handleThread displays a single thread with its full conversation
+func (s *WebServer) handleThread(w http.ResponseWriter, r *http.Request, repoPath, threadID string) {
+	absPath := filepath.Join(s.rootPath, repoPath)
+
+	repo, err := openRepo(absPath)
+	if err != nil {
+		http.Error(w, "Repository not found", http.StatusNotFound)
+		return
+	}
+
+	thread, err := repo.LoadThread(threadID)
+	if err != nil {
+		http.Error(w, "Thread not found", http.StatusNotFound)
+		return
+	}
+
+	// Try to detect code host URL from config or git remote
+	var codeHostURL *git.CodeHostURL
+	if remoteURL := repo.GetCodeHostURL(); remoteURL != "" {
+		codeHostURL = git.ParseGitRemoteURL(remoteURL)
+	}
+
+	data := ThreadPageData{
+		Title:       "Thread " + threadID[:7],
+		RepoPath:    repoPath,
+		RepoName:    filepath.Base(repoPath),
+		Thread:      thread,
+		CodeHostURL: codeHostURL,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := renderTemplate(w, "thread.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

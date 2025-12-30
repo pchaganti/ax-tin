@@ -15,13 +15,18 @@ var templateFS embed.FS
 
 var templates *template.Template
 
+// MaxThreadMessages is the maximum number of messages to show per thread on commit pages
+const MaxThreadMessages = 5
+
 func init() {
 	funcMap := template.FuncMap{
-		"shortID":    shortID,
-		"formatTime": formatTime,
-		"roleClass":  roleClass,
-		"truncate":   truncate,
-		"commitURL":  commitURL,
+		"shortID":         shortID,
+		"formatTime":      formatTime,
+		"roleClass":       roleClass,
+		"truncate":        truncate,
+		"commitURL":       commitURL,
+		"limitMessages":   limitMessages,
+		"hasMoreMessages": hasMoreMessages,
 	}
 
 	templates = template.Must(template.New("").
@@ -76,4 +81,17 @@ func commitURL(codeHost *git.CodeHostURL, hash string) string {
 // renderTemplate executes a named template with the given data
 func renderTemplate(w io.Writer, name string, data interface{}) error {
 	return templates.ExecuteTemplate(w, name, data)
+}
+
+// limitMessages returns the first N messages from a thread
+func limitMessages(messages []model.Message, limit int) []model.Message {
+	if len(messages) <= limit {
+		return messages
+	}
+	return messages[:limit]
+}
+
+// hasMoreMessages checks if a thread has more than N messages
+func hasMoreMessages(messages []model.Message, limit int) bool {
+	return len(messages) > limit
 }

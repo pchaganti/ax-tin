@@ -1,0 +1,65 @@
+{{define "thread.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thread {{shortID .Thread.ID}} - Tin</title>
+    {{template "styles"}}
+</head>
+<body>
+    <div class="header">
+        <h1><a href="/">Tin</a></h1>
+        <nav class="nav">
+            <a href="/">Repositories</a> /
+            <a href="/repo/{{.RepoPath}}">{{.RepoName}}</a> /
+            <span class="commit-hash">Thread {{shortID .Thread.ID}}</span>
+        </nav>
+    </div>
+
+    <h2>Thread <code>{{shortID .Thread.ID}}</code></h2>
+
+    <dl class="metadata">
+        <dt>Agent</dt>
+        <dd>{{.Thread.Agent}}</dd>
+        <dt>Started</dt>
+        <dd>{{formatTime .Thread.StartedAt}}</dd>
+        <dt>Messages</dt>
+        <dd>{{len .Thread.Messages}}</dd>
+        {{if .Thread.Status}}
+        <dt>Status</dt>
+        <dd>{{.Thread.Status}}</dd>
+        {{end}}
+    </dl>
+
+    <div class="thread">
+        {{range .Thread.Messages}}
+        <div class="message {{roleClass .Role}}">
+            <div class="message-header">
+                <span class="message-role">{{if eq .Role "human"}}Human{{else}}Assistant{{end}}</span>
+                <span>{{formatTime .Timestamp}}</span>
+            </div>
+            <div class="message-content">{{.Content}}</div>
+            {{if .ToolCalls}}
+            <div class="tool-calls">
+                {{range .ToolCalls}}
+                <div class="tool-call">{{.Name}}</div>
+                {{end}}
+            </div>
+            {{end}}
+            {{if .GitHashAfter}}
+            <div class="git-state">Git state:
+                {{$gitUrl := commitURL $.CodeHostURL .GitHashAfter}}
+                {{if $gitUrl}}<a href="{{$gitUrl}}" target="_blank"><code>{{shortID .GitHashAfter}}</code></a>{{else}}<code>{{shortID .GitHashAfter}}</code>{{end}}
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+
+    {{if not .Thread.Messages}}
+    <p class="empty-state">No messages in this thread.</p>
+    {{end}}
+</body>
+</html>
+{{end}}

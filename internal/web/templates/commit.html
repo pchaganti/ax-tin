@@ -40,7 +40,7 @@
     {{range .Threads}}
     <div class="thread">
         <div class="thread-header">
-            <h3>Thread <code>{{shortID .ID}}</code></h3>
+            <h3><a href="/repo/{{$.RepoPath}}/thread/{{.ID}}">Thread <code>{{shortID .ID}}</code></a></h3>
             <p>
                 <strong>Agent:</strong> {{.Agent}} |
                 <strong>Started:</strong> {{formatTime .StartedAt}} |
@@ -48,28 +48,20 @@
             </p>
         </div>
 
-        {{range .Messages}}
+        {{if .Messages}}
+        {{with index .Messages 0}}
         <div class="message {{roleClass .Role}}">
             <div class="message-header">
                 <span class="message-role">{{if eq .Role "human"}}Human{{else}}Assistant{{end}}</span>
                 <span>{{formatTime .Timestamp}}</span>
             </div>
             <div class="message-content">{{.Content}}</div>
-            {{if .ToolCalls}}
-            <div class="tool-calls">
-                {{range .ToolCalls}}
-                <div class="tool-call">{{.Name}}</div>
-                {{end}}
-            </div>
-            {{end}}
-            {{if .GitHashAfter}}
-            <div class="git-state">Git state:
-                {{$gitUrl := commitURL $.CodeHostURL .GitHashAfter}}
-                {{if $gitUrl}}<a href="{{$gitUrl}}" target="_blank"><code>{{shortID .GitHashAfter}}</code></a>{{else}}<code>{{shortID .GitHashAfter}}</code>{{end}}
-            </div>
-            {{end}}
         </div>
         {{end}}
+        {{end}}
+        <div class="view-more">
+            <a href="/repo/{{$.RepoPath}}/thread/{{.ID}}">View full thread ({{len .Messages}} messages)</a>
+        </div>
     </div>
     {{end}}
 
