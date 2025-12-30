@@ -44,7 +44,7 @@ func TestStatus_WithStagedThreads(t *testing.T) {
 	thread := model.NewThread("claude-code", "", "", "")
 	thread.AddMessage(model.NewMessage(model.RoleHuman, "Hello", "", nil))
 	repo.SaveThread(thread)
-	repo.StageThread(thread.ID, len(thread.Messages))
+	repo.StageThread(thread.ID, len(thread.Messages), thread.ComputeContentHash())
 
 	err := Status([]string{})
 	if err != nil {

@@ -311,10 +311,21 @@ func (s *Server) handlePull(pc *ProtocolConn, repo *storage.Repository, remoteAd
 		Threads: make([]model.Thread, 0),
 	}
 
+	// Handle legacy thread ID requests (load latest version)
 	for _, threadID := range want.ThreadIDs {
 		thread, err := repo.LoadThread(threadID)
 		if err != nil {
 			log.Printf("[%s] thread not found: %s", remoteAddr, threadID)
+			continue
+		}
+		pack.Threads = append(pack.Threads, *thread)
+	}
+
+	// Handle specific version requests
+	for _, versionRef := range want.ThreadVersions {
+		thread, err := repo.LoadThreadVersion(versionRef.ThreadID, versionRef.ContentHash)
+		if err != nil {
+			log.Printf("[%s] thread version not found: %s@%s", remoteAddr, versionRef.ThreadID, versionRef.ContentHash[:8])
 			continue
 		}
 		pack.Threads = append(pack.Threads, *thread)
@@ -350,9 +361,10 @@ func (s *Server) handlePull(pc *ProtocolConn, repo *storage.Repository, remoteAd
 
 func buildRefsMessage(repo *storage.Repository) (*RefsMessage, error) {
 	refs := &RefsMessage{
-		Branches:  make(map[string]string),
-		CommitIDs: make([]string, 0),
-		ThreadIDs: make([]string, 0),
+		Branches:       make(map[string]string),
+		CommitIDs:      make([]string, 0),
+		ThreadIDs:      make([]string, 0),
+		ThreadVersions: make(map[string][]string),
 	}
 
 	// Get HEAD
@@ -380,11 +392,17 @@ func buildRefsMessage(repo *storage.Repository) (*RefsMessage, error) {
 		}
 	}
 
-	// Get all thread IDs
+	// Get all thread IDs and their versions
 	threads, err := repo.ListThreads()
 	if err == nil {
 		for _, thread := range threads {
 			refs.ThreadIDs = append(refs.ThreadIDs, thread.ID)
+
+			// Get all versions for this thread
+			versions, err := repo.ListThreadVersions(thread.ID)
+			if err == nil && len(versions) > 0 {
+				refs.ThreadVersions[thread.ID] = versions
+			}
 		}
 	}
 

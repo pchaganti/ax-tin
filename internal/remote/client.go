@@ -70,14 +70,10 @@ func (c *Client) Push(repo *storage.Repository, branch string, force bool) error
 		return fmt.Errorf("failed to decode refs: %w", err)
 	}
 
-	// Build set of remote objects for quick lookup
+	// Build set of remote commits for quick lookup
 	remoteCommits := make(map[string]bool)
 	for _, id := range remoteRefs.CommitIDs {
 		remoteCommits[id] = true
-	}
-	remoteThreads := make(map[string]bool)
-	for _, id := range remoteRefs.ThreadIDs {
-		remoteThreads[id] = true
 	}
 
 	// Get local commit for branch
@@ -103,13 +99,30 @@ func (c *Client) Push(repo *storage.Repository, branch string, force bool) error
 		commitsToSend = append(commitsToSend, *commit)
 
 		// Collect threads referenced by this commit
+		// Load specific versions if ContentHash is available, otherwise load latest
 		for _, ref := range commit.Threads {
-			if !remoteThreads[ref.ThreadID] && threadsToSend[ref.ThreadID] == nil {
-				thread, err := repo.LoadThread(ref.ThreadID)
+			// Use ContentHash as key if available to ensure we send the right version
+			key := ref.ThreadID
+			if ref.ContentHash != "" {
+				key = ref.ThreadID + "@" + ref.ContentHash
+			}
+
+			if threadsToSend[key] == nil {
+				var thread *model.Thread
+				var err error
+
+				// Try to load specific version first
+				if ref.ContentHash != "" {
+					thread, err = repo.LoadThreadVersion(ref.ThreadID, ref.ContentHash)
+				}
+				// Fall back to latest version
+				if thread == nil || err != nil {
+					thread, err = repo.LoadThread(ref.ThreadID)
+				}
 				if err != nil {
 					return fmt.Errorf("failed to load thread %s: %w", ref.ThreadID, err)
 				}
-				threadsToSend[ref.ThreadID] = thread
+				threadsToSend[key] = thread
 			}
 		}
 
@@ -277,6 +290,7 @@ func (c *Client) Pull(repo *storage.Repository, branch string) (*RefsMessage, er
 	// Determine what we need
 	wantCommits := make([]string, 0)
 	wantThreads := make([]string, 0)
+	wantThreadVersions := make([]ThreadVersionRef, 0)
 
 	for _, id := range remoteRefs.CommitIDs {
 		if !localCommits[id] {
@@ -289,10 +303,23 @@ func (c *Client) Pull(repo *storage.Repository, branch string) (*RefsMessage, er
 		}
 	}
 
+	// Check for thread versions we don't have
+	for threadID, versions := range remoteRefs.ThreadVersions {
+		for _, contentHash := range versions {
+			if !repo.HasThreadVersion(threadID, contentHash) {
+				wantThreadVersions = append(wantThreadVersions, ThreadVersionRef{
+					ThreadID:    threadID,
+					ContentHash: contentHash,
+				})
+			}
+		}
+	}
+
 	// Send want
 	want := WantMessage{
-		CommitIDs: wantCommits,
-		ThreadIDs: wantThreads,
+		CommitIDs:      wantCommits,
+		ThreadIDs:      wantThreads,
+		ThreadVersions: wantThreadVersions,
 	}
 	if err := c.pc.Send(MsgWant, want); err != nil {
 		return nil, fmt.Errorf("failed to send want: %w", err)

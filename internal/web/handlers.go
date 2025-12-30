@@ -165,9 +165,21 @@ func (s *WebServer) handleCommit(w http.ResponseWriter, r *http.Request, repoPat
 	}
 
 	// Load all threads referenced in commit
+	// Try to load specific version if ContentHash is available
 	var threads []*model.Thread
 	for _, ref := range commit.Threads {
-		if thread, err := repo.LoadThread(ref.ThreadID); err == nil {
+		var thread *model.Thread
+		var err error
+
+		// Try to load specific version first
+		if ref.ContentHash != "" {
+			thread, err = repo.LoadThreadVersion(ref.ThreadID, ref.ContentHash)
+		}
+		// Fall back to latest version
+		if thread == nil || err != nil {
+			thread, err = repo.LoadThread(ref.ThreadID)
+		}
+		if err == nil {
 			threads = append(threads, thread)
 		}
 	}

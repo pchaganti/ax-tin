@@ -10,8 +10,16 @@ import (
 	"github.com/danieladler/tin/internal/model"
 )
 
-// SaveThread saves a thread to the repository
+// SaveThread saves a thread to the repository.
+// Also saves a versioned snapshot if the content has changed.
 func (r *Repository) SaveThread(thread *model.Thread) error {
+	// Save versioned snapshot (idempotent - skips if version already exists)
+	if _, err := r.SaveThreadVersion(thread); err != nil {
+		// Non-fatal: log but continue with main save
+		// This allows existing repos without thread-versions dir to still work
+	}
+
+	// Save to "latest" location (existing behavior)
 	path := filepath.Join(r.TinPath, ThreadsDir, thread.ID+".json")
 	data, err := json.MarshalIndent(thread, "", "  ")
 	if err != nil {
@@ -116,7 +124,7 @@ func (r *Repository) GetStagedThreads() ([]model.ThreadRef, error) {
 }
 
 // StageThread adds a thread to the staging area
-func (r *Repository) StageThread(threadID string, messageCount int) error {
+func (r *Repository) StageThread(threadID string, messageCount int, contentHash string) error {
 	index, err := r.ReadIndex()
 	if err != nil {
 		return err
@@ -125,8 +133,9 @@ func (r *Repository) StageThread(threadID string, messageCount int) error {
 	// Check if already staged
 	for i, ref := range index.Staged {
 		if ref.ThreadID == threadID {
-			// Update message count
+			// Update message count and content hash
 			index.Staged[i].MessageCount = messageCount
+			index.Staged[i].ContentHash = contentHash
 			return r.WriteIndex(index)
 		}
 	}
@@ -135,6 +144,7 @@ func (r *Repository) StageThread(threadID string, messageCount int) error {
 	index.Staged = append(index.Staged, model.ThreadRef{
 		ThreadID:     threadID,
 		MessageCount: messageCount,
+		ContentHash:  contentHash,
 	})
 
 	return r.WriteIndex(index)
@@ -216,4 +226,81 @@ func (r *Repository) PruneEmptyThreads() {
 			r.DeleteThread(thread.ID)
 		}
 	}
+}
+
+// SaveThreadVersion saves a versioned snapshot of a thread, returns content hash
+func (r *Repository) SaveThreadVersion(thread *model.Thread) (string, error) {
+	contentHash := thread.ComputeContentHash()
+
+	// Create thread-specific version directory
+	versionDir := filepath.Join(r.TinPath, ThreadVersionsDir, thread.ID)
+	if err := os.MkdirAll(versionDir, 0755); err != nil {
+		return "", err
+	}
+
+	// Check if this version already exists
+	versionPath := filepath.Join(versionDir, contentHash+".json")
+	if _, err := os.Stat(versionPath); err == nil {
+		// Version already exists, no need to save again
+		return contentHash, nil
+	}
+
+	// Save the version
+	data, err := json.MarshalIndent(thread, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(versionPath, data, 0644); err != nil {
+		return "", err
+	}
+
+	return contentHash, nil
+}
+
+// LoadThreadVersion loads a specific version of a thread
+func (r *Repository) LoadThreadVersion(threadID, contentHash string) (*model.Thread, error) {
+	versionPath := filepath.Join(r.TinPath, ThreadVersionsDir, threadID, contentHash+".json")
+	data, err := os.ReadFile(versionPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	var thread model.Thread
+	if err := json.Unmarshal(data, &thread); err != nil {
+		return nil, err
+	}
+	return &thread, nil
+}
+
+// ListThreadVersions returns all version hashes for a thread
+func (r *Repository) ListThreadVersions(threadID string) ([]string, error) {
+	versionDir := filepath.Join(r.TinPath, ThreadVersionsDir, threadID)
+	entries, err := os.ReadDir(versionDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+
+	var versions []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		hash := strings.TrimSuffix(entry.Name(), ".json")
+		versions = append(versions, hash)
+	}
+
+	return versions, nil
+}
+
+// HasThreadVersion checks if a specific version of a thread exists
+func (r *Repository) HasThreadVersion(threadID, contentHash string) bool {
+	versionPath := filepath.Join(r.TinPath, ThreadVersionsDir, threadID, contentHash+".json")
+	_, err := os.Stat(versionPath)
+	return err == nil
 }

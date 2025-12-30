@@ -134,8 +134,9 @@ func HandleUserPromptSubmit(input *HookInput) error {
 		repo.UnstageThread(oldThreadID)
 	}
 
-	// Auto-stage the thread
-	if err := repo.StageThread(thread.ID, len(thread.Messages)); err != nil {
+	// Auto-stage the thread with content hash
+	contentHash := thread.ComputeContentHash()
+	if err := repo.StageThread(thread.ID, len(thread.Messages), contentHash); err != nil {
 		return err
 	}
 
@@ -177,8 +178,9 @@ func HandleStop(input *HookInput) error {
 	msg.GitHashAfter = gitHash
 	thread.AddMessage(msg)
 
-	// Auto-stage the thread
-	if err := repo.StageThread(thread.ID, len(thread.Messages)); err != nil {
+	// Auto-stage the thread with content hash
+	contentHash := thread.ComputeContentHash()
+	if err := repo.StageThread(thread.ID, len(thread.Messages), contentHash); err != nil {
 		return err
 	}
 

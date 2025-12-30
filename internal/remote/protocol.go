@@ -43,16 +43,24 @@ type HelloMessage struct {
 
 // RefsMessage advertises refs and object IDs
 type RefsMessage struct {
-	HEAD      string            `json:"head"`                 // current HEAD branch
-	Branches  map[string]string `json:"branches"`             // branch name -> commit ID
-	CommitIDs []string          `json:"commit_ids,omitempty"` // all known commit IDs
-	ThreadIDs []string          `json:"thread_ids,omitempty"` // all known thread IDs
+	HEAD           string              `json:"head"`                      // current HEAD branch
+	Branches       map[string]string   `json:"branches"`                  // branch name -> commit ID
+	CommitIDs      []string            `json:"commit_ids,omitempty"`      // all known commit IDs
+	ThreadIDs      []string            `json:"thread_ids,omitempty"`      // all known thread IDs
+	ThreadVersions map[string][]string `json:"thread_versions,omitempty"` // threadID -> [contentHashes]
+}
+
+// ThreadVersionRef identifies a specific version of a thread
+type ThreadVersionRef struct {
+	ThreadID    string `json:"thread_id"`
+	ContentHash string `json:"content_hash"`
 }
 
 // WantMessage requests specific objects
 type WantMessage struct {
-	CommitIDs []string `json:"commit_ids,omitempty"`
-	ThreadIDs []string `json:"thread_ids,omitempty"`
+	CommitIDs      []string           `json:"commit_ids,omitempty"`
+	ThreadIDs      []string           `json:"thread_ids,omitempty"`
+	ThreadVersions []ThreadVersionRef `json:"thread_versions,omitempty"` // request specific versions
 }
 
 // PackMessage contains objects to transfer

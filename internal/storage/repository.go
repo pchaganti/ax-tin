@@ -13,14 +13,15 @@ import (
 )
 
 const (
-	TinDir      = ".tin"
-	HeadFile    = "HEAD"
-	ConfigFile  = "config"
-	IndexFile   = "index.json"
-	ThreadsDir  = "threads"
-	CommitsDir  = "commits"
-	RefsDir     = "refs"
-	HeadsDir    = "heads"
+	TinDir            = ".tin"
+	HeadFile          = "HEAD"
+	ConfigFile        = "config"
+	IndexFile         = "index.json"
+	ThreadsDir        = "threads"
+	ThreadVersionsDir = "thread-versions"
+	CommitsDir        = "commits"
+	RefsDir           = "refs"
+	HeadsDir          = "heads"
 )
 
 var (
@@ -78,6 +79,7 @@ func Init(path string) (*Repository, error) {
 	dirs := []string{
 		tinPath,
 		filepath.Join(tinPath, ThreadsDir),
+		filepath.Join(tinPath, ThreadVersionsDir),
 		filepath.Join(tinPath, CommitsDir),
 		filepath.Join(tinPath, RefsDir),
 		filepath.Join(tinPath, RefsDir, HeadsDir),
@@ -363,6 +365,7 @@ func InitBare(path string) (*Repository, error) {
 	dirs := []string{
 		tinPath,
 		filepath.Join(tinPath, ThreadsDir),
+		filepath.Join(tinPath, ThreadVersionsDir),
 		filepath.Join(tinPath, CommitsDir),
 		filepath.Join(tinPath, RefsDir),
 		filepath.Join(tinPath, RefsDir, HeadsDir),

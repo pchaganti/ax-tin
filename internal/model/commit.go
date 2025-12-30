@@ -7,10 +7,11 @@ import (
 	"time"
 )
 
-// ThreadRef references a thread at a specific message count
+// ThreadRef references a thread at a specific message count and content version
 type ThreadRef struct {
 	ThreadID     string `json:"thread_id"`
 	MessageCount int    `json:"message_count"`
+	ContentHash  string `json:"content_hash,omitempty"` // Content hash for exact version reference
 }
 
 // TinCommit represents a commit in tin's history

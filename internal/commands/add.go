@@ -50,7 +50,8 @@ func Add(args []string) error {
 		}
 
 		for _, thread := range unstaged {
-			if err := repo.StageThread(thread.ID, len(thread.Messages)); err != nil {
+			contentHash := thread.ComputeContentHash()
+			if err := repo.StageThread(thread.ID, len(thread.Messages), contentHash); err != nil {
 				return err
 			}
 			fmt.Printf("Staged thread %s\n", thread.ID[:8])
@@ -84,7 +85,10 @@ func Add(args []string) error {
 			messageCount = partialCount
 		}
 
-		if err := repo.StageThread(thread.ID, messageCount); err != nil {
+		// Compute content hash for the thread at this message count
+		contentHash := thread.ComputeContentHash()
+
+		if err := repo.StageThread(thread.ID, messageCount, contentHash); err != nil {
 			return err
 		}
 

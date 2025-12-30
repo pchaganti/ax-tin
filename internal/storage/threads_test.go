@@ -103,7 +103,7 @@ func TestRepository_StageThread(t *testing.T) {
 	}
 
 	// Stage a thread
-	if err := repo.StageThread("thread-1", 10); err != nil {
+	if err := repo.StageThread("thread-1", 10, "testhash1"); err != nil {
 		t.Fatalf("StageThread failed: %v", err)
 	}
 
@@ -132,12 +132,12 @@ func TestRepository_StageThread_UpdateExisting(t *testing.T) {
 	}
 
 	// Stage initially
-	if err := repo.StageThread("thread-1", 10); err != nil {
+	if err := repo.StageThread("thread-1", 10, "testhash1"); err != nil {
 		t.Fatalf("StageThread failed: %v", err)
 	}
 
 	// Stage again with different count (updates)
-	if err := repo.StageThread("thread-1", 15); err != nil {
+	if err := repo.StageThread("thread-1", 15, "testhash2"); err != nil {
 		t.Fatalf("StageThread update failed: %v", err)
 	}
 
@@ -163,8 +163,8 @@ func TestRepository_UnstageThread(t *testing.T) {
 	}
 
 	// Stage two threads
-	repo.StageThread("thread-1", 10)
-	repo.StageThread("thread-2", 20)
+	repo.StageThread("thread-1", 10, "")
+	repo.StageThread("thread-2", 20, "")
 
 	// Unstage one
 	if err := repo.UnstageThread("thread-1"); err != nil {
@@ -193,8 +193,8 @@ func TestRepository_ClearIndex(t *testing.T) {
 	}
 
 	// Stage some threads
-	repo.StageThread("thread-1", 10)
-	repo.StageThread("thread-2", 20)
+	repo.StageThread("thread-1", 10, "")
+	repo.StageThread("thread-2", 20, "")
 
 	// Clear
 	if err := repo.ClearIndex(); err != nil {
@@ -235,7 +235,7 @@ func TestRepository_GetUnstagedThreads(t *testing.T) {
 	repo.SaveThread(thread3)
 
 	// Stage thread1
-	repo.StageThread(thread1.ID, len(thread1.Messages))
+	repo.StageThread(thread1.ID, len(thread1.Messages), "")
 
 	// Get unstaged
 	unstaged, err := repo.GetUnstagedThreads()
