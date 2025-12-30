@@ -37,9 +37,10 @@ type RemoteConfig struct {
 
 // Config holds tin configuration
 type Config struct {
-	Version     int            `json:"version"`
-	Remotes     []RemoteConfig `json:"remotes,omitempty"`
-	CodeHostURL string         `json:"code_host_url,omitempty"`
+	Version       int            `json:"version"`
+	Remotes       []RemoteConfig `json:"remotes,omitempty"`
+	CodeHostURL   string         `json:"code_host_url,omitempty"`
+	ThreadHostURL string         `json:"thread_host_url,omitempty"` // Base URL for tin web viewer (e.g., https://tin.example.com)
 }
 
 // Index represents the staging area
@@ -485,4 +486,87 @@ func (r *Repository) RemoveRemote(name string) error {
 
 	config.Remotes = remotes
 	return r.WriteConfig(config)
+}
+
+// GetThreadHostURL returns the base URL for the tin web viewer.
+// Checks config first, then derives from origin remote URL.
+func (r *Repository) GetThreadHostURL() string {
+	// Check explicit config first
+	if config, err := r.ReadConfig(); err == nil && config.ThreadHostURL != "" {
+		return strings.TrimSuffix(config.ThreadHostURL, "/")
+	}
+
+	// Try to derive from origin remote
+	remote, err := r.GetRemote("origin")
+	if err != nil {
+		return ""
+	}
+
+	return deriveThreadHostURL(remote.URL)
+}
+
+// deriveThreadHostURL converts a tin remote URL to a web viewer base URL
+// Example: "localhost:2323/myproject.tin" -> "http://localhost:2323"
+// Example: "tin.example.com:2323/repos/project.tin" -> "https://tin.example.com:2323"
+func deriveThreadHostURL(remoteURL string) string {
+	// Handle tin:// scheme
+	if strings.HasPrefix(remoteURL, "tin://") {
+		remoteURL = strings.TrimPrefix(remoteURL, "tin://")
+	}
+
+	// Find the path separator to get host:port
+	slashIdx := strings.Index(remoteURL, "/")
+	if slashIdx == -1 {
+		return ""
+	}
+
+	hostPort := remoteURL[:slashIdx]
+
+	// Use http for localhost, https otherwise
+	scheme := "https"
+	if strings.HasPrefix(hostPort, "localhost") || strings.HasPrefix(hostPort, "127.0.0.1") {
+		scheme = "http"
+	}
+
+	return scheme + "://" + hostPort
+}
+
+// BuildCommitURL constructs a URL to view a tin commit in the web viewer.
+// Returns empty string if no thread host is configured or derivable.
+func (r *Repository) BuildCommitURL(commitID string) string {
+	baseURL := r.GetThreadHostURL()
+	if baseURL == "" {
+		return ""
+	}
+
+	// Get the repo path from the origin remote
+	remote, err := r.GetRemote("origin")
+	if err != nil {
+		return ""
+	}
+
+	repoPath := extractRepoPath(remote.URL)
+	if repoPath == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s/repo/%s/commit/%s", baseURL, repoPath, commitID)
+}
+
+// extractRepoPath gets the repository path from a remote URL
+// Example: "localhost:2323/myproject.tin" -> "myproject.tin"
+func extractRepoPath(remoteURL string) string {
+	// Handle tin:// scheme
+	if strings.HasPrefix(remoteURL, "tin://") {
+		remoteURL = strings.TrimPrefix(remoteURL, "tin://")
+	}
+
+	// Find the path after host:port
+	slashIdx := strings.Index(remoteURL, "/")
+	if slashIdx == -1 {
+		return ""
+	}
+
+	path := remoteURL[slashIdx+1:]
+	return strings.TrimPrefix(path, "/")
 }

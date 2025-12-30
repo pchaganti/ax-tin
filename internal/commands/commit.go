@@ -135,7 +135,7 @@ func Commit(args []string) error {
 	// Commit any remaining staged git changes
 	hasGitChanges, _ := repo.GitHasStagedChanges()
 	if hasGitChanges {
-		gitMsg := fmt.Sprintf("[tin %s] %s", commit.ShortID(), truncateCommitMessage(message))
+		gitMsg := formatGitCommitMessage(repo, commit.ID, message)
 		if err := repo.GitCommit(gitMsg); err != nil {
 			// Log but don't fail the tin commit
 			fmt.Fprintf(os.Stderr, "Warning: failed to commit git changes: %v\n", err)
@@ -251,6 +251,23 @@ func formatThreadGitMessage(thread *model.Thread) string {
 	}
 
 	return fmt.Sprintf("[tin %s] %s", shortID, preview)
+}
+
+// formatGitCommitMessage creates a git commit message with optional tin commit link
+func formatGitCommitMessage(repo *storage.Repository, tinCommitID string, message string) string {
+	shortID := tinCommitID
+	if len(shortID) > 8 {
+		shortID = shortID[:8]
+	}
+
+	gitMsg := fmt.Sprintf("[tin %s] %s", shortID, truncateCommitMessage(message))
+
+	// Add tin commit URL if available
+	if commitURL := repo.BuildCommitURL(tinCommitID); commitURL != "" {
+		gitMsg = gitMsg + "\n\n" + commitURL
+	}
+
+	return gitMsg
 }
 
 // generateCommitMessage creates a commit message from staged threads
