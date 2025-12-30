@@ -70,8 +70,15 @@ func threadList(args []string) error {
 		if first := t.FirstHumanMessage(); first != nil {
 			preview = truncate(first.Content, 35)
 		}
+
+		// Add continuation indicator if thread has a parent
+		idDisplay := t.ID[:8]
+		if t.ParentThreadID != "" {
+			idDisplay = "↳ " + t.ID[:8]
+		}
+
 		fmt.Printf("%-10s %-12s %-10s %-8d %s\n",
-			t.ID[:8],
+			idDisplay,
 			truncate(t.Agent, 12),
 			t.Status,
 			len(t.Messages),
@@ -111,6 +118,9 @@ func threadShow(args []string) error {
 	fmt.Printf("Started: %s\n", thread.StartedAt.Format(time.RFC3339))
 	if thread.CompletedAt != nil {
 		fmt.Printf("Completed: %s\n", thread.CompletedAt.Format(time.RFC3339))
+	}
+	if thread.ParentThreadID != "" {
+		fmt.Printf("Continues: %s\n", thread.ParentThreadID[:min(8, len(thread.ParentThreadID))])
 	}
 	fmt.Printf("Messages: %d\n", len(thread.Messages))
 	fmt.Println(strings.Repeat("-", 60))

@@ -63,8 +63,21 @@ func HandleSessionStart(input *HookInput) error {
 	// Prune any empty threads before creating a new one
 	repo.PruneEmptyThreads()
 
-	// Create a new thread
-	thread := model.NewThread("claude-code", input.SessionID, "", "")
+	// Check for existing threads with this session ID (for resumed sessions)
+	var parentThreadID, parentMessageID string
+	existingThreads, _ := repo.FindThreadsBySessionID(input.SessionID)
+	if len(existingThreads) > 0 {
+		// Link to the most recent thread with this session ID
+		parent := existingThreads[0]
+		parentThreadID = parent.ID
+		// Also link to the last message in that thread
+		if len(parent.Messages) > 0 {
+			parentMessageID = parent.Messages[len(parent.Messages)-1].ID
+		}
+	}
+
+	// Create a new thread with parent reference if resuming
+	thread := model.NewThread("claude-code", input.SessionID, parentThreadID, parentMessageID)
 
 	// Generate a temporary ID until first message
 	thread.ID = fmt.Sprintf("cc-%s", input.SessionID[:min(12, len(input.SessionID))])

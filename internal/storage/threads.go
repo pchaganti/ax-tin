@@ -304,3 +304,22 @@ func (r *Repository) HasThreadVersion(threadID, contentHash string) bool {
 	_, err := os.Stat(versionPath)
 	return err == nil
 }
+
+// FindThreadsBySessionID returns all threads with the given agent session ID,
+// sorted by start time (newest first)
+func (r *Repository) FindThreadsBySessionID(sessionID string) ([]*model.Thread, error) {
+	threads, err := r.ListThreads()
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []*model.Thread
+	for _, t := range threads {
+		if t.AgentSessionID == sessionID {
+			matches = append(matches, t)
+		}
+	}
+
+	// Already sorted by ListThreads (newest first)
+	return matches, nil
+}
