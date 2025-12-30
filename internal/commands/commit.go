@@ -132,6 +132,23 @@ func Commit(args []string) error {
 		return err
 	}
 
+	// Commit any remaining staged git changes
+	hasGitChanges, _ := repo.GitHasStagedChanges()
+	if hasGitChanges {
+		gitMsg := fmt.Sprintf("[tin %s] %s", commit.ShortID(), truncateCommitMessage(message))
+		if err := repo.GitCommit(gitMsg); err != nil {
+			// Log but don't fail the tin commit
+			fmt.Fprintf(os.Stderr, "Warning: failed to commit git changes: %v\n", err)
+		} else {
+			// Update the commit's git hash to the new one
+			newGitHash, _ := repo.GetCurrentGitHash()
+			if newGitHash != "" {
+				commit.GitCommitHash = newGitHash
+				repo.SaveCommit(commit)
+			}
+		}
+	}
+
 	// Print summary
 	fmt.Printf("[%s %s] %s\n", branch, commit.ShortID(), truncateCommitMessage(message))
 	fmt.Printf(" %d thread(s) committed\n", len(staged))
