@@ -51,42 +51,22 @@ func Commit(args []string) error {
 		message = generateCommitMessage(repo, staged)
 	}
 
-	// For any staged threads without a git commit (still in progress),
-	// create a git commit for their changes now
-	threadCommitCreated := false
-	for _, ref := range staged {
-		thread, err := repo.LoadThread(ref.ThreadID)
-		if err != nil {
-			continue
-		}
+	// Stage all changed files
+	if files, err := repo.GitGetChangedFiles(); err == nil && len(files) > 0 {
+		repo.GitAdd(files)
+	}
 
-		if thread.GitCommitHash == "" {
-			// Thread is still in progress - create git commit for its changes
-			if err := commitThreadChanges(repo, thread, ref.MessageCount); err != nil {
-				// Log but don't fail
-			} else {
-				threadCommitCreated = true
-			}
+	// Create git commit if there are staged changes (BEFORE tin commit)
+	hasGitChanges, _ := repo.GitHasStagedChanges()
+	if hasGitChanges {
+		gitMsg := formatGitCommitMessage(repo, staged, message)
+		if err := repo.GitCommit(gitMsg); err != nil {
+			return fmt.Errorf("failed to commit git changes: %w", err)
 		}
 	}
 
-	// Get git hash from the latest staged thread
-	var gitHash string
-	for i := len(staged) - 1; i >= 0; i-- {
-		thread, err := repo.LoadThread(staged[i].ThreadID)
-		if err != nil {
-			continue
-		}
-		if thread.GitCommitHash != "" {
-			gitHash = thread.GitCommitHash
-			break
-		}
-	}
-
-	// Fallback to current HEAD if no thread has a git hash (backward compatibility)
-	if gitHash == "" {
-		gitHash, _ = repo.GetCurrentGitHash()
-	}
+	// Get git hash (from new commit or existing HEAD)
+	gitHash, _ := repo.GetCurrentGitHash()
 
 	// Get current branch and parent commit
 	branch, err := repo.ReadHead()
@@ -117,12 +97,13 @@ func Commit(args []string) error {
 		return err
 	}
 
-	// Mark staged threads as committed
+	// Mark staged threads as committed and update their GitCommitHash
 	for _, ref := range staged {
 		thread, err := repo.LoadThread(ref.ThreadID)
 		if err != nil {
 			continue
 		}
+		thread.GitCommitHash = gitHash
 		thread.Status = model.ThreadStatusCommitted
 		thread.CommittedContentHash = thread.ComputeContentHash()
 		if err := repo.SaveThread(thread); err != nil {
@@ -133,46 +114,6 @@ func Commit(args []string) error {
 	// Clear the index
 	if err := repo.ClearIndex(); err != nil {
 		return err
-	}
-
-	// Create git commit with tin commit link
-	// Only create if there are actual file changes, or if we need an empty commit
-	// for the URL and we didn't already create a commit via commitThreadChanges
-
-	// Stage any changed files (commitThreadChanges does this for in-progress threads,
-	// but we need to do it here for threads that already had a git hash)
-	if files, err := repo.GitGetChangedFiles(); err == nil && len(files) > 0 {
-		repo.GitAdd(files)
-	}
-
-	hasGitChanges, _ := repo.GitHasStagedChanges()
-	commitURL := repo.BuildCommitURL(commit.ID)
-
-	// Create a git commit if:
-	// 1. There are actual staged changes, OR
-	// 2. We have a commit URL AND we didn't already create a commit for thread changes
-	shouldCreateGitCommit := hasGitChanges || (commitURL != "" && !threadCommitCreated)
-
-	if shouldCreateGitCommit {
-		gitMsg := formatGitCommitMessage(repo, commit.ID, message)
-		var gitErr error
-		if hasGitChanges {
-			gitErr = repo.GitCommit(gitMsg)
-		} else {
-			// No file changes, but we want to record the tin commit link
-			gitErr = repo.GitCommitEmpty(gitMsg)
-		}
-		if gitErr != nil {
-			// Log but don't fail the tin commit
-			fmt.Fprintf(os.Stderr, "Warning: failed to commit git changes: %v\n", gitErr)
-		} else {
-			// Update the commit's git hash to the new one
-			newGitHash, _ := repo.GetCurrentGitHash()
-			if newGitHash != "" {
-				commit.GitCommitHash = newGitHash
-				repo.SaveCommit(commit)
-			}
-		}
 	}
 
 	// Print summary
@@ -227,86 +168,11 @@ Examples:
   tin commit -m "Add user authentication" # Use explicit message`)
 }
 
-// commitThreadChanges creates a git commit for a thread's file changes
-func commitThreadChanges(repo *storage.Repository, thread *model.Thread, messageCount int) error {
-	// Get all changed files from git status (respects .gitignore, excludes .tin/)
-	files, err := repo.GitGetChangedFiles()
-	if err == nil && len(files) > 0 {
-		// Stage the files
-		if err := repo.GitAdd(files); err != nil {
-			return err
-		}
-
-		// Check if there are actually staged changes
-		hasChanges, err := repo.GitHasStagedChanges()
-		if err != nil {
-			return err
-		}
-
-		if hasChanges {
-			// Create git commit with thread info
-			commitMsg := formatThreadGitMessage(thread)
-			if err := repo.GitCommit(commitMsg); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Store the current git hash
-	gitHash, _ := repo.GetCurrentGitHash()
-	thread.GitCommitHash = gitHash
-
-	return repo.SaveThread(thread)
-}
-
-// formatThreadGitMessage creates a git commit message for a thread
-func formatThreadGitMessage(thread *model.Thread) string {
-	shortID := thread.ID
-	if len(shortID) > 8 {
-		shortID = shortID[:8]
-	}
-
-	message := "thread changes"
-	if first := thread.FirstHumanMessage(); first != nil {
-		message = strings.TrimSpace(first.Content)
-	}
-
-	// Split into subject line and body
-	firstLine := message
-	restOfMessage := ""
-	if idx := strings.Index(message, "\n"); idx != -1 {
-		firstLine = strings.TrimSpace(message[:idx])
-		restOfMessage = strings.TrimSpace(message[idx+1:])
-	}
-
-	// Build commit message with subject and optional body
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("[tin %s] %s", shortID, firstLine))
-
-	if restOfMessage != "" {
-		builder.WriteString("\n\n")
-		builder.WriteString(restOfMessage)
-	}
-
-	return builder.String()
-}
-
-// formatGitCommitMessage creates a git commit message with tin commit link
-func formatGitCommitMessage(repo *storage.Repository, tinCommitID string, message string) string {
-	shortID := tinCommitID
-	if len(shortID) > 8 {
-		shortID = shortID[:8]
-	}
-
-	// Clean up message - normalize whitespace
+// formatGitCommitMessage creates a git commit message with thread links
+func formatGitCommitMessage(repo *storage.Repository, staged []model.ThreadRef, message string) string {
 	message = strings.TrimSpace(message)
 
-	// Build the commit message:
-	// Subject: [tin <id>] <message or first line>
-	// Body: full message if multi-line, plus tin commit URL
-	var builder strings.Builder
-
-	// Subject line
+	// Split message into first line and rest
 	firstLine := message
 	restOfMessage := ""
 	if idx := strings.Index(message, "\n"); idx != -1 {
@@ -314,23 +180,40 @@ func formatGitCommitMessage(repo *storage.Repository, tinCommitID string, messag
 		restOfMessage = strings.TrimSpace(message[idx+1:])
 	}
 
-	builder.WriteString(fmt.Sprintf("[tin %s] %s", shortID, firstLine))
+	var builder strings.Builder
 
-	// Body section
-	builder.WriteString("\n")
+	// Subject line: [tin <thread-id>] for single thread, [tin] for multiple
+	if len(staged) == 1 {
+		shortID := staged[0].ThreadID
+		if len(shortID) > 8 {
+			shortID = shortID[:8]
+		}
+		builder.WriteString(fmt.Sprintf("[tin %s] %s", shortID, firstLine))
+	} else {
+		builder.WriteString(fmt.Sprintf("[tin] %s", firstLine))
+	}
 
-	// Include rest of message if there was more
+	// Include rest of message if multi-line
 	if restOfMessage != "" {
-		builder.WriteString("\n")
+		builder.WriteString("\n\n")
 		builder.WriteString(restOfMessage)
 	}
 
-	// Always add tin commit URL if available (wrapped in <> for GitHub markdown linking)
-	if commitURL := repo.BuildCommitURL(tinCommitID); commitURL != "" {
-		builder.WriteString("\n\n")
-		builder.WriteString("<")
-		builder.WriteString(commitURL)
-		builder.WriteString(">")
+	// Add thread URLs
+	if len(staged) == 1 {
+		url := repo.BuildThreadURL(staged[0].ThreadID, staged[0].ContentHash)
+		if url != "" {
+			builder.WriteString("\n\n")
+			builder.WriteString(url)
+		}
+	} else if len(staged) > 1 {
+		builder.WriteString("\n\nThreads:")
+		for _, ref := range staged {
+			url := repo.BuildThreadURL(ref.ThreadID, ref.ContentHash)
+			if url != "" {
+				builder.WriteString(fmt.Sprintf("\n- %s", url))
+			}
+		}
 	}
 
 	return builder.String()

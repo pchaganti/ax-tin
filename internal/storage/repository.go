@@ -567,6 +567,28 @@ func (r *Repository) BuildCommitURL(commitID string) string {
 	return fmt.Sprintf("%s/repo/%s/commit/%s", baseURL, repoPath, commitID)
 }
 
+// BuildThreadURL constructs a URL to view a thread in the web viewer.
+// Returns empty string if no thread host is configured or derivable.
+func (r *Repository) BuildThreadURL(threadID, contentHash string) string {
+	baseURL := r.GetThreadHostURL()
+	if baseURL == "" {
+		return ""
+	}
+
+	// Get the repo path from the origin remote
+	remote, err := r.GetRemote("origin")
+	if err != nil {
+		return ""
+	}
+
+	repoPath := extractRepoPath(remote.URL)
+	if repoPath == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s/repo/%s/thread/%s/%s", baseURL, repoPath, threadID, contentHash)
+}
+
 // extractRepoPath gets the repository path from a remote URL
 // Example: "localhost:2323/myproject.tin" -> "myproject.tin"
 func extractRepoPath(remoteURL string) string {
