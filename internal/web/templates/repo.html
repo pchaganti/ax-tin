@@ -1,0 +1,59 @@
+{{define "repo.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.RepoName}} - Tin</title>
+    {{template "styles"}}
+</head>
+<body>
+    <div class="header">
+        <h1><a href="/">Tin</a></h1>
+        <nav class="nav">
+            <a href="/">Repositories</a> / {{.RepoName}}
+        </nav>
+    </div>
+
+    <h2>{{.RepoName}}</h2>
+
+    <h3>Branches</h3>
+    <ul class="branch-list">
+    {{range .Branches}}
+        <li {{if .IsCurrent}}class="branch-current"{{end}}>
+            <a href="/repo/{{$.RepoPath}}?branch={{.Name}}">{{.Name}}</a>
+            {{if .CommitID}}<span class="commit-hash">({{shortID .CommitID}})</span>{{end}}
+        </li>
+    {{end}}
+    </ul>
+
+    <h3>Commits on {{.SelectedBranch}}</h3>
+    {{if .Commits}}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Message</th>
+                <th>Date</th>
+                <th>Git</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .Commits}}
+            <tr>
+                <td>
+                    <a href="/repo/{{$.RepoPath}}/commit/{{.ID}}" class="commit-hash">{{shortID .ID}}</a>
+                </td>
+                <td>{{truncate .Message 60}}</td>
+                <td>{{formatTime .Timestamp}}</td>
+                <td><code>{{shortID .GitCommitHash}}</code></td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <p class="empty-state">No commits on this branch yet.</p>
+    {{end}}
+</body>
+</html>
+{{end}}

@@ -1,0 +1,43 @@
+{{define "index.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Repositories - Tin</title>
+    {{template "styles"}}
+</head>
+<body>
+    <div class="header">
+        <h1><a href="/">Tin</a></h1>
+        <nav class="nav">Repositories</nav>
+    </div>
+
+    <h2>Repositories</h2>
+    {{if .Repos}}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Branch</th>
+                <th>Last Activity</th>
+                <th>Path</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .Repos}}
+            <tr>
+                <td><a href="/repo/{{.Path}}">{{.Name}}</a></td>
+                <td>{{.CurrentBranch}}</td>
+                <td>{{formatTime .LastActivity}}</td>
+                <td><code>{{.AbsPath}}</code></td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <p class="empty-state">No tin repositories found under {{.RootPath}}</p>
+    {{end}}
+</body>
+</html>
+{{end}}

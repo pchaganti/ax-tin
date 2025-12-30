@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/danieladler/tin/internal/git"
 	"github.com/danieladler/tin/internal/model"
 	"github.com/danieladler/tin/internal/storage"
 )
@@ -187,16 +186,9 @@ Examples:
 
 // commitThreadChanges creates a git commit for a thread's file changes
 func commitThreadChanges(repo *storage.Repository, thread *model.Thread, messageCount int) error {
-	// Only process up to messageCount messages
-	messages := thread.Messages
-	if messageCount > 0 && messageCount < len(messages) {
-		messages = messages[:messageCount]
-	}
-
-	// Extract modified files from tool calls
-	files := git.ExtractModifiedFiles(messages)
-
-	if len(files) > 0 {
+	// Get all changed files from git status (respects .gitignore, excludes .tin/)
+	files, err := repo.GitGetChangedFiles()
+	if err == nil && len(files) > 0 {
 		// Stage the files
 		if err := repo.GitAdd(files); err != nil {
 			return err

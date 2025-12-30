@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danieladler/tin/internal/git"
 	"github.com/danieladler/tin/internal/model"
 	"github.com/danieladler/tin/internal/storage"
 )
@@ -203,23 +202,17 @@ func HandleSessionEnd(input *HookInput) error {
 		return err
 	}
 
-	// Extract modified files from tool calls
-	files := git.ExtractModifiedFiles(thread.Messages)
-
-	if len(files) > 0 {
+	// Get all changed files from git status (respects .gitignore, excludes .tin/)
+	files, err := repo.GitGetChangedFiles()
+	if err == nil && len(files) > 0 {
 		// Stage the files
-		if err := repo.GitAdd(files); err != nil {
-			// Log but don't fail - git add might fail for valid reasons
-			// (e.g., file outside repo)
-		}
-
-		// Check if there are actually staged changes
-		hasChanges, err := repo.GitHasStagedChanges()
-		if err == nil && hasChanges {
-			// Create git commit with thread info
-			commitMsg := formatGitCommitMessage(thread)
-			if err := repo.GitCommit(commitMsg); err != nil {
-				// Log but don't fail - git commit might fail if nothing to commit
+		if err := repo.GitAdd(files); err == nil {
+			// Check if there are actually staged changes
+			hasChanges, err := repo.GitHasStagedChanges()
+			if err == nil && hasChanges {
+				// Create git commit with thread info
+				commitMsg := formatGitCommitMessage(thread)
+				repo.GitCommit(commitMsg)
 			}
 		}
 	}

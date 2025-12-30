@@ -249,6 +249,38 @@ func (r *Repository) GitHasStagedChanges() (bool, error) {
 	return false, nil
 }
 
+// GitGetChangedFiles returns all modified, untracked, and staged files.
+// Uses git status --porcelain which respects .gitignore.
+// Excludes .tin/ directory files.
+func (r *Repository) GitGetChangedFiles() ([]string, error) {
+	cmd := exec.Command("git", "status", "--porcelain")
+	cmd.Dir = r.RootPath
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, line := range strings.Split(string(output), "\n") {
+		if len(line) < 3 {
+			continue
+		}
+		// git status --porcelain format: XY filename
+		// X = staging area status, Y = working tree status
+		// Filename starts at position 3
+		file := line[3:]
+		// Handle renamed files: "R  old -> new"
+		if idx := strings.Index(file, " -> "); idx != -1 {
+			file = file[idx+4:]
+		}
+		// Exclude .tin/ directory
+		if !strings.HasPrefix(file, ".tin/") && file != ".tin" {
+			files = append(files, file)
+		}
+	}
+	return files, nil
+}
+
 // InitBare initializes a bare tin repository (no git, no working tree)
 // Bare repositories are used as remote repositories
 func InitBare(path string) (*Repository, error) {

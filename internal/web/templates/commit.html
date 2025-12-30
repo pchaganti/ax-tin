@@ -1,0 +1,75 @@
+{{define "commit.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commit {{shortID .Commit.ID}} - Tin</title>
+    {{template "styles"}}
+</head>
+<body>
+    <div class="header">
+        <h1><a href="/">Tin</a></h1>
+        <nav class="nav">
+            <a href="/">Repositories</a> /
+            <a href="/repo/{{.RepoPath}}">{{.RepoName}}</a> /
+            <span class="commit-hash">{{shortID .Commit.ID}}</span>
+        </nav>
+    </div>
+
+    <h2>Commit <code>{{shortID .Commit.ID}}</code></h2>
+
+    <dl class="metadata">
+        <dt>Message</dt>
+        <dd>{{.Commit.Message}}</dd>
+        <dt>Date</dt>
+        <dd>{{formatTime .Commit.Timestamp}}</dd>
+        <dt>Git Commit</dt>
+        <dd><code>{{.Commit.GitCommitHash}}</code></dd>
+        {{if .Commit.Author}}
+        <dt>Author</dt>
+        <dd>{{.Commit.Author}}</dd>
+        {{end}}
+        <dt>Threads</dt>
+        <dd>{{len .Commit.Threads}} thread(s)</dd>
+    </dl>
+
+    {{range .Threads}}
+    <div class="thread">
+        <div class="thread-header">
+            <h3>Thread <code>{{shortID .ID}}</code></h3>
+            <p>
+                <strong>Agent:</strong> {{.Agent}} |
+                <strong>Started:</strong> {{formatTime .StartedAt}} |
+                <strong>Messages:</strong> {{len .Messages}}
+            </p>
+        </div>
+
+        {{range .Messages}}
+        <div class="message {{roleClass .Role}}">
+            <div class="message-header">
+                <span class="message-role">{{if eq .Role "human"}}Human{{else}}Assistant{{end}}</span>
+                <span>{{formatTime .Timestamp}}</span>
+            </div>
+            <div class="message-content">{{.Content}}</div>
+            {{if .ToolCalls}}
+            <div class="tool-calls">
+                {{range .ToolCalls}}
+                <div class="tool-call">{{.Name}}</div>
+                {{end}}
+            </div>
+            {{end}}
+            {{if .GitHashAfter}}
+            <div class="git-state">Git state: <code>{{shortID .GitHashAfter}}</code></div>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+
+    {{if not .Threads}}
+    <p class="empty-state">No threads found for this commit.</p>
+    {{end}}
+</body>
+</html>
+{{end}}
