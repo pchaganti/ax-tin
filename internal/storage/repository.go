@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -279,6 +280,32 @@ func (r *Repository) GitGetChangedFiles() ([]string, error) {
 		}
 	}
 	return files, nil
+}
+
+// GitPush runs git push with the given remote and branch
+func (r *Repository) GitPush(remote, branch string, force bool) error {
+	args := []string{"push", remote, branch}
+	if force {
+		args = []string{"push", "--force", remote, branch}
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = r.RootPath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git push failed: %s", string(output))
+	}
+	return nil
+}
+
+// GitPull runs git pull with the given remote and branch
+func (r *Repository) GitPull(remote, branch string) error {
+	cmd := exec.Command("git", "pull", remote, branch)
+	cmd.Dir = r.RootPath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git pull failed: %s", string(output))
+	}
+	return nil
 }
 
 // InitBare initializes a bare tin repository (no git, no working tree)

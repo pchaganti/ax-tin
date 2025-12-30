@@ -50,27 +50,33 @@ func Push(args []string) error {
 		}
 	}
 
-	// Get remote URL
+	// Always do git push first
+	fmt.Printf("Pushing git to %s/%s...\n", remoteName, branch)
+	if err := repo.GitPush(remoteName, branch, force); err != nil {
+		return err
+	}
+	fmt.Printf("Git pushed %s -> %s/%s\n", branch, remoteName, branch)
+
+	// Also push tin data if a tin remote is configured
 	remoteConfig, err := repo.GetRemote(remoteName)
-	if err != nil {
-		return fmt.Errorf("remote '%s' not found", remoteName)
+	if err == nil {
+		fmt.Printf("Pushing tin to %s (%s)...\n", remoteName, remoteConfig.URL)
+
+		// Connect to remote
+		client, err := remote.Dial(remoteConfig.URL)
+		if err != nil {
+			return err
+		}
+		defer client.Close()
+
+		// Push
+		if err := client.Push(repo, branch, force); err != nil {
+			return err
+		}
+
+		fmt.Printf("Tin pushed %s -> %s/%s\n", branch, remoteName, branch)
 	}
 
-	fmt.Printf("Pushing to %s (%s)...\n", remoteName, remoteConfig.URL)
-
-	// Connect to remote
-	client, err := remote.Dial(remoteConfig.URL)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	// Push
-	if err := client.Push(repo, branch, force); err != nil {
-		return err
-	}
-
-	fmt.Printf("Pushed %s -> %s/%s\n", branch, remoteName, branch)
 	return nil
 }
 

@@ -47,31 +47,36 @@ func Pull(args []string) error {
 		}
 	}
 
-	// Get remote URL
+	// Always do git pull first
+	fmt.Printf("Pulling git from %s/%s...\n", remoteName, branch)
+	if err := repo.GitPull(remoteName, branch); err != nil {
+		return err
+	}
+	fmt.Printf("Git pulled %s <- %s/%s\n", branch, remoteName, branch)
+
+	// Also pull tin data if a tin remote is configured
 	remoteConfig, err := repo.GetRemote(remoteName)
-	if err != nil {
-		return fmt.Errorf("remote '%s' not found", remoteName)
-	}
+	if err == nil {
+		fmt.Printf("Pulling tin from %s (%s)...\n", remoteName, remoteConfig.URL)
 
-	fmt.Printf("Pulling from %s (%s)...\n", remoteName, remoteConfig.URL)
+		// Connect to remote
+		client, err := remote.Dial(remoteConfig.URL)
+		if err != nil {
+			return err
+		}
+		defer client.Close()
 
-	// Connect to remote
-	client, err := remote.Dial(remoteConfig.URL)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
+		// Pull
+		refs, err := client.Pull(repo, branch)
+		if err != nil {
+			return err
+		}
 
-	// Pull
-	refs, err := client.Pull(repo, branch)
-	if err != nil {
-		return err
-	}
-
-	// Report what we got
-	fmt.Printf("Updated %s from %s/%s\n", branch, remoteName, branch)
-	if commitID, ok := refs.Branches[branch]; ok {
-		fmt.Printf("  -> %s\n", commitID[:12])
+		// Report what we got
+		fmt.Printf("Tin pulled %s <- %s/%s\n", branch, remoteName, branch)
+		if commitID, ok := refs.Branches[branch]; ok {
+			fmt.Printf("  -> %s\n", commitID[:12])
+		}
 	}
 
 	return nil
