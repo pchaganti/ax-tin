@@ -4,11 +4,8 @@
 
 Thread-based version control for conversational agentic coding. Wraps git, treating conversation threads as the primary unit of change.
 
-***
-
-**WARNING:** This is a proof of concept, 100% vibe coded (this README.md is the only human-edited file in this repo!), and may not be suitable for all agentic coding workflows. See [contributing](#contributing) below if you want to support this project.
-
-***
+> [!WARNING]
+> This is a proof of concept, 100% vibe coded (this README.md is the only human-edited file in this repo!), and may not be suitable for all agentic coding workflows. See [contributing](#contributing) below if you want to support this project.
 
 ## Highlights
 
