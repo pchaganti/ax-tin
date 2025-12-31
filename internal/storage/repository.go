@@ -586,7 +586,11 @@ func (r *Repository) BuildThreadURL(threadID, contentHash string) string {
 		return ""
 	}
 
-	return fmt.Sprintf("%s/repo/%s/thread/%s/%s", baseURL, repoPath, threadID, contentHash)
+	url := fmt.Sprintf("%s/repo/%s/thread/%s", baseURL, repoPath, threadID)
+	if contentHash != "" {
+		url += "?version=" + contentHash
+	}
+	return url
 }
 
 // extractRepoPath gets the repository path from a remote URL
