@@ -128,6 +128,12 @@ sequenceDiagram
 
 ## Why the name "`tin`"?
 
+>**git** (plural gits)
+>
+>(British, Ireland, slang, derogatory) A silly, incompetent, stupid or annoying person (usually a man). 
+
+\- [Wiktionary](https://en.wiktionary.org/wiki/git)
+
 >"I'm an egotistical bastard, and I name all my projects after myself. First Linux, now **git**."
 
 \- Linus Torvalds
