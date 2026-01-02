@@ -28,6 +28,8 @@ func init() {
 		"limitMessages":   limitMessages,
 		"hasMoreMessages": hasMoreMessages,
 		"isMergeCommit":   isMergeCommit,
+		"agentIconPath":   agentIconPath,
+		"agentIconClass":  agentIconClass,
 	}
 
 	templates = template.Must(template.New("").
@@ -100,4 +102,28 @@ func hasMoreMessages(messages []model.Message, limit int) bool {
 // isMergeCommit checks if a commit is a merge commit (has two parents)
 func isMergeCommit(commit *model.TinCommit) bool {
 	return commit != nil && commit.SecondParentID != ""
+}
+
+// agentIconPath returns the URL path to an agent's icon
+func agentIconPath(agent string) string {
+	switch agent {
+	case "amp":
+		return "/assets/amp-mark-color.svg"
+	case "claude-code":
+		return "/assets/claude-symbol-clay.png"
+	default:
+		return ""
+	}
+}
+
+// agentIconClass returns a CSS class for the agent
+func agentIconClass(agent string) string {
+	switch agent {
+	case "amp":
+		return "agent-amp"
+	case "claude-code":
+		return "agent-claude"
+	default:
+		return "agent-unknown"
+	}
 }

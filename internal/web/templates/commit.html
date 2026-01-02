@@ -49,6 +49,8 @@
     <div class="thread">
         <div class="thread-header">
             <h3>
+                {{$iconPath := agentIconPath .Thread.Agent}}
+                {{if $iconPath}}<img src="{{$iconPath}}" alt="{{.Thread.Agent}}" title="{{.Thread.Agent}}" class="agent-icon {{agentIconClass .Thread.Agent}}">{{end}}
                 <a href="/repo/{{$.RepoPath}}/thread/{{.Thread.ID}}{{if .ContentHash}}?version={{.ContentHash}}{{end}}">Thread <code>{{shortID .Thread.ID}}</code></a>
                 {{if .ParentThread}}
                 <span class="continuation-note">(continued from <a href="/repo/{{$.RepoPath}}/thread/{{.ParentThread.ID}}"><code>{{shortID .ParentThread.ID}}</code></a>)</span>

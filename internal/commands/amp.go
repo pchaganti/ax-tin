@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -113,6 +113,17 @@ func pullThreadByID(idOrURL string) error {
 		return fmt.Errorf("not a tin repository (run 'tin init' first)")
 	}
 
+	// Auto-stage git changes (like Claude hooks do at session end)
+	// Do this early so it happens even if thread is up-to-date
+	files, gitErr := repo.GitGetChangedFiles()
+	if gitErr == nil && len(files) > 0 {
+		if err := repo.GitAdd(files); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to stage git changes: %v\n", err)
+		} else {
+			fmt.Printf("Staged %d file(s)\n", len(files))
+		}
+	}
+
 	// Check if thread already exists by Amp session ID (for deduplication)
 	existingThreads, _ := repo.FindThreadsBySessionID(threadID)
 	if len(existingThreads) > 0 {
@@ -211,14 +222,12 @@ func parseAmpMarkdown(markdown string, ampThreadID string) (*model.Thread, error
 		}
 	}
 
-	// Parse messages
-	scanner := bufio.NewScanner(strings.NewReader(markdown))
+	// Parse messages - collect all lines first for easier processing
+	lines := strings.Split(markdown, "\n")
 	var currentRole model.Role
 	var currentContent strings.Builder
-	var inToolUse bool
-	var toolName string
-	var toolArgs strings.Builder
 	var currentToolCalls []model.ToolCall
+	i := 0
 
 	flushMessage := func() {
 		if currentRole != "" {
@@ -232,77 +241,104 @@ func parseAmpMarkdown(markdown string, ampThreadID string) (*model.Thread, error
 		currentToolCalls = nil
 	}
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for i < len(lines) {
+		line := lines[i]
 
 		// Detect role headers
 		if line == "## User" {
 			flushMessage()
 			currentRole = model.RoleHuman
+			i++
 			continue
 		}
 		if line == "## Assistant" {
 			flushMessage()
 			currentRole = model.RoleAssistant
+			i++
 			continue
 		}
 
 		// Skip tool result sections (these are user messages with tool results)
+		// but continue processing after them to capture assistant text
 		if strings.HasPrefix(line, "**Tool Result:**") {
-			// Skip until next ## header
-			for scanner.Scan() {
-				nextLine := scanner.Text()
-				if strings.HasPrefix(nextLine, "## ") {
-					// Process this line in next iteration
-					if nextLine == "## User" {
-						flushMessage()
-						currentRole = model.RoleHuman
-					} else if nextLine == "## Assistant" {
-						flushMessage()
-						currentRole = model.RoleAssistant
-					}
+			// Skip until we hit another section marker
+			i++
+			for i < len(lines) {
+				nextLine := lines[i]
+				if strings.HasPrefix(nextLine, "## ") || strings.HasPrefix(nextLine, "**Tool Use:**") || strings.HasPrefix(nextLine, "**Tool Result:**") {
 					break
 				}
+				i++
 			}
 			continue
 		}
 
 		// Detect tool use
 		if strings.HasPrefix(line, "**Tool Use:** `") {
-			inToolUse = true
-			toolName = strings.TrimSuffix(strings.TrimPrefix(line, "**Tool Use:** `"), "`")
-			toolArgs.Reset()
+			toolName := strings.TrimSuffix(strings.TrimPrefix(line, "**Tool Use:** `"), "`")
+			var toolArgs strings.Builder
+			i++
+
+			// Skip empty lines between tool use header and code block
+			for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+				i++
+			}
+
+			// Skip opening code fence (```json or ``` or ```anything)
+			if i < len(lines) && strings.HasPrefix(lines[i], "```") {
+				i++
+			}
+
+			// Collect JSON arguments until closing fence
+			for i < len(lines) && lines[i] != "```" {
+				toolArgs.WriteString(lines[i])
+				toolArgs.WriteString("\n")
+				i++
+			}
+
+			// Skip closing ```
+			if i < len(lines) && lines[i] == "```" {
+				i++
+			}
+
+			// Validate and store the arguments
+			argsStr := strings.TrimSpace(toolArgs.String())
+			var argsBytes []byte
+			if argsStr != "" && argsStr[0] == '{' {
+				// Try to validate as JSON, store as-is if valid
+				var test interface{}
+				if err := json.Unmarshal([]byte(argsStr), &test); err == nil {
+					argsBytes = []byte(argsStr)
+				} else {
+					// Invalid JSON - store empty object with tool name hint
+					argsBytes = []byte(fmt.Sprintf(`{"_raw": "parse error"}`, toolName))
+				}
+			} else {
+				// Not JSON - store as empty
+				argsBytes = []byte("{}")
+			}
+
+			currentToolCalls = append(currentToolCalls, model.ToolCall{
+				Name:      toolName,
+				Arguments: argsBytes,
+			})
 			continue
 		}
 
-		// Handle tool use content
-		if inToolUse {
-			if line == "```json" {
-				continue
-			}
-			if line == "```" {
-				// End of tool use
-				currentToolCalls = append(currentToolCalls, model.ToolCall{
-					Name:      toolName,
-					Arguments: []byte(toolArgs.String()),
-				})
-				inToolUse = false
-				continue
-			}
-			toolArgs.WriteString(line)
-			toolArgs.WriteString("\n")
-			continue
-		}
-
-		// Regular content
+		// Regular content - only add if we're in an assistant role
+		// (user messages are just their prompts, no tool results)
 		if currentRole != "" {
 			currentContent.WriteString(line)
 			currentContent.WriteString("\n")
 		}
+		i++
 	}
 
 	// Flush final message
 	flushMessage()
+
+	// Merge consecutive assistant messages (tool uses followed by text responses)
+	thread.Messages = mergeConsecutiveAssistantMessages(thread.Messages)
 
 	// Set thread ID based on first message (consistent with tin's model)
 	if len(thread.Messages) > 0 {
@@ -317,6 +353,58 @@ func parseAmpMarkdown(markdown string, ampThreadID string) (*model.Thread, error
 	thread.CompletedAt = &now
 
 	return thread, nil
+}
+
+// mergeConsecutiveAssistantMessages combines adjacent assistant messages into one
+// This handles the pattern: [tool calls] -> [tool results (skipped)] -> [assistant text response]
+func mergeConsecutiveAssistantMessages(messages []model.Message) []model.Message {
+	if len(messages) == 0 {
+		return messages
+	}
+
+	var merged []model.Message
+	for i := 0; i < len(messages); i++ {
+		msg := messages[i]
+
+		// If this is an assistant message, look ahead for more
+		if msg.Role == model.RoleAssistant {
+			// Collect all consecutive assistant messages
+			combinedContent := strings.Builder{}
+			combinedToolCalls := append([]model.ToolCall{}, msg.ToolCalls...)
+			if msg.Content != "" {
+				combinedContent.WriteString(msg.Content)
+			}
+
+			j := i + 1
+			for j < len(messages) && messages[j].Role == model.RoleAssistant {
+				if messages[j].Content != "" {
+					if combinedContent.Len() > 0 {
+						combinedContent.WriteString("\n\n")
+					}
+					combinedContent.WriteString(messages[j].Content)
+				}
+				combinedToolCalls = append(combinedToolCalls, messages[j].ToolCalls...)
+				j++
+			}
+
+			// Create merged message
+			mergedMsg := model.Message{
+				ID:              msg.ID,
+				Role:            msg.Role,
+				Content:         strings.TrimSpace(combinedContent.String()),
+				Timestamp:       msg.Timestamp,
+				ToolCalls:       combinedToolCalls,
+				GitHashAfter:    messages[j-1].GitHashAfter, // Use last message's git hash
+				ParentMessageID: msg.ParentMessageID,
+			}
+			merged = append(merged, mergedMsg)
+			i = j - 1 // Skip the messages we merged
+		} else {
+			merged = append(merged, msg)
+		}
+	}
+
+	return merged
 }
 
 func printAmpHelp() {

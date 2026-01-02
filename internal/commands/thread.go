@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -131,13 +132,17 @@ func threadShow(args []string) error {
 			role = "Assistant"
 		}
 		fmt.Printf("\n[%d] %s (%s)\n", i+1, role, msg.Timestamp.Format("15:04:05"))
-		fmt.Println(msg.Content)
 
 		if len(msg.ToolCalls) > 0 {
-			fmt.Printf("\n  Tool calls: %d\n", len(msg.ToolCalls))
-			for _, tc := range msg.ToolCalls {
-				fmt.Printf("    - %s\n", tc.Name)
+			// Group tool calls by type and summarize
+			toolSummary := summarizeToolCalls(msg.ToolCalls)
+			if toolSummary != "" {
+				fmt.Println(toolSummary)
 			}
+		}
+
+		if msg.Content != "" {
+			fmt.Println(msg.Content)
 		}
 
 		if msg.GitHashAfter != "" {
@@ -411,6 +416,163 @@ func findThreadByPrefix(repo *storage.Repository, prefix string) (*model.Thread,
 	}
 
 	return matches[0], nil
+}
+
+// summarizeToolCalls creates a readable summary of tool calls
+// Extracts file paths, patterns, and other useful info from arguments
+func summarizeToolCalls(toolCalls []model.ToolCall) string {
+	if len(toolCalls) == 0 {
+		return ""
+	}
+
+	// Group by tool type
+	reads := []string{}
+	edits := []string{}
+	creates := []string{}
+	greps := []string{}
+	globs := []string{}
+	bashes := []string{}
+	webSearches := []string{}
+	webReads := []string{}
+	finders := []string{}
+	others := []string{}
+
+	for _, tc := range toolCalls {
+		var args map[string]interface{}
+		if len(tc.Arguments) > 0 {
+			json.Unmarshal(tc.Arguments, &args)
+		}
+
+		switch tc.Name {
+		case "Read":
+			if path, ok := args["path"].(string); ok {
+				reads = append(reads, shortenPath(path))
+			} else {
+				reads = append(reads, "?")
+			}
+		case "edit_file":
+			if path, ok := args["path"].(string); ok {
+				edits = append(edits, shortenPath(path))
+			} else {
+				edits = append(edits, "?")
+			}
+		case "create_file":
+			if path, ok := args["path"].(string); ok {
+				creates = append(creates, shortenPath(path))
+			} else {
+				creates = append(creates, "?")
+			}
+		case "Grep":
+			pattern := ""
+			if p, ok := args["pattern"].(string); ok {
+				pattern = p
+			}
+			path := ""
+			if p, ok := args["path"].(string); ok {
+				path = shortenPath(p)
+			}
+			if pattern != "" {
+				if path != "" {
+					greps = append(greps, fmt.Sprintf("\"%s\" in %s", truncate(pattern, 20), path))
+				} else {
+					greps = append(greps, fmt.Sprintf("\"%s\"", truncate(pattern, 30)))
+				}
+			} else {
+				greps = append(greps, "?")
+			}
+		case "glob":
+			if pattern, ok := args["filePattern"].(string); ok {
+				globs = append(globs, pattern)
+			} else {
+				globs = append(globs, "?")
+			}
+		case "Bash":
+			if cmd, ok := args["cmd"].(string); ok {
+				bashes = append(bashes, truncate(cmd, 40))
+			} else {
+				bashes = append(bashes, "?")
+			}
+		case "web_search":
+			if obj, ok := args["objective"].(string); ok {
+				webSearches = append(webSearches, truncate(obj, 40))
+			} else {
+				webSearches = append(webSearches, "?")
+			}
+		case "read_web_page":
+			if url, ok := args["url"].(string); ok {
+				webReads = append(webReads, truncate(url, 50))
+			} else {
+				webReads = append(webReads, "?")
+			}
+		case "finder":
+			if query, ok := args["query"].(string); ok {
+				finders = append(finders, truncate(query, 40))
+			} else {
+				finders = append(finders, "?")
+			}
+		default:
+			others = append(others, tc.Name)
+		}
+	}
+
+	var lines []string
+
+	if len(reads) > 0 {
+		lines = append(lines, fmt.Sprintf("  📖 Read: %s", strings.Join(reads, ", ")))
+	}
+	if len(edits) > 0 {
+		lines = append(lines, fmt.Sprintf("  ✏️  Edit: %s", strings.Join(edits, ", ")))
+	}
+	if len(creates) > 0 {
+		lines = append(lines, fmt.Sprintf("  📝 Create: %s", strings.Join(creates, ", ")))
+	}
+	if len(greps) > 0 {
+		lines = append(lines, fmt.Sprintf("  🔍 Grep: %s", strings.Join(greps, "; ")))
+	}
+	if len(globs) > 0 {
+		lines = append(lines, fmt.Sprintf("  📁 Glob: %s", strings.Join(globs, ", ")))
+	}
+	if len(bashes) > 0 {
+		lines = append(lines, fmt.Sprintf("  💻 Bash: %s", strings.Join(bashes, "; ")))
+	}
+	if len(finders) > 0 {
+		lines = append(lines, fmt.Sprintf("  🔎 Finder: %s", strings.Join(finders, "; ")))
+	}
+	if len(webSearches) > 0 {
+		lines = append(lines, fmt.Sprintf("  🌐 Web search: %s", strings.Join(webSearches, "; ")))
+	}
+	if len(webReads) > 0 {
+		lines = append(lines, fmt.Sprintf("  🌐 Web read: %s", strings.Join(webReads, "; ")))
+	}
+	if len(others) > 0 {
+		// Deduplicate and count others
+		counts := make(map[string]int)
+		for _, o := range others {
+			counts[o]++
+		}
+		var otherSummary []string
+		for name, count := range counts {
+			if count > 1 {
+				otherSummary = append(otherSummary, fmt.Sprintf("%s×%d", name, count))
+			} else {
+				otherSummary = append(otherSummary, name)
+			}
+		}
+		lines = append(lines, fmt.Sprintf("  🔧 Other: %s", strings.Join(otherSummary, ", ")))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// shortenPath removes common prefixes and returns just the relevant part of a path
+func shortenPath(path string) string {
+	// Get base parts - try to show last 2-3 components
+	parts := strings.Split(path, string(filepath.Separator))
+	if len(parts) <= 3 {
+		return path
+	}
+	// Return last 2 parts
+	return strings.Join(parts[len(parts)-2:], "/")
 }
 
 func printThreadHelp() {

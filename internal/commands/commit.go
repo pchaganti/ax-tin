@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
@@ -46,6 +47,23 @@ func Commit(args []string) error {
 				return fmt.Errorf("%s\n\nUse 'tin sync' to align states, or 'tin commit --force' to proceed anyway", mismatch)
 			}
 			return err
+		}
+	}
+
+	// Check if user might want to pull Amp threads first
+	if !force {
+		if shouldPrompt, reason := shouldPromptForAmpPull(repo); shouldPrompt {
+			fmt.Printf("%s\nRun 'tin amp pull' first? [Y/n]: ", reason)
+			reader := bufio.NewReader(os.Stdin)
+			response, _ := reader.ReadString('\n')
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response == "" || response == "y" || response == "yes" {
+				fmt.Println()
+				if err := Amp([]string{"pull"}); err != nil {
+					return fmt.Errorf("amp pull failed: %w", err)
+				}
+				fmt.Println()
+			}
 		}
 	}
 
@@ -286,4 +304,39 @@ func generateCommitMessage(repo *storage.Repository, staged []model.ThreadRef) s
 		result = result[:717] + "..."
 	}
 	return result
+}
+
+// shouldPromptForAmpPull checks if the user might want to run tin amp pull first
+// Returns (shouldPrompt, reason)
+func shouldPromptForAmpPull(repo *storage.Repository) (bool, string) {
+	// Check if there are uncommitted git changes
+	files, err := repo.GitGetChangedFiles()
+	hasUncommittedChanges := err == nil && len(files) > 0
+
+	// Check if the latest local thread uses Amp
+	threads, err := repo.ListThreads()
+	latestUsesAmp := false
+	if err == nil && len(threads) > 0 {
+		latestUsesAmp = threads[0].Agent == "amp"
+	}
+
+	// Prompt if either condition is true
+	if latestUsesAmp && hasUncommittedChanges {
+		return true, "Latest thread uses Amp and there are uncommitted git changes."
+	}
+	if latestUsesAmp {
+		return true, "Latest thread uses Amp."
+	}
+	if hasUncommittedChanges {
+		// Check if any staged thread uses Amp
+		staged, _ := repo.GetStagedThreads()
+		for _, ref := range staged {
+			thread, err := repo.LoadThread(ref.ThreadID)
+			if err == nil && thread.Agent == "amp" {
+				return true, "You have uncommitted git changes and staged Amp threads."
+			}
+		}
+	}
+
+	return false, ""
 }

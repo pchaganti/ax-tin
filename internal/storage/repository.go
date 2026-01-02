@@ -340,6 +340,10 @@ func (r *Repository) GitGetChangedFiles() ([]string, error) {
 		if idx := strings.Index(file, " -> "); idx != -1 {
 			file = file[idx+4:]
 		}
+		// Git wraps filenames with special characters in quotes - strip them
+		if len(file) >= 2 && file[0] == '"' && file[len(file)-1] == '"' {
+			file = file[1 : len(file)-1]
+		}
 		// Exclude .tin/ directory
 		if !strings.HasPrefix(file, ".tin/") && file != ".tin" {
 			files = append(files, file)
