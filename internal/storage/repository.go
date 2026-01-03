@@ -421,6 +421,34 @@ func (r *Repository) GetCodeHostURL() string {
 	return ""
 }
 
+// GitGetAuthor returns the git author in "Name <email>" format
+func (r *Repository) GitGetAuthor() string {
+	nameCmd := exec.Command("git", "config", "user.name")
+	nameCmd.Dir = r.RootPath
+	nameOutput, nameErr := nameCmd.Output()
+
+	emailCmd := exec.Command("git", "config", "user.email")
+	emailCmd.Dir = r.RootPath
+	emailOutput, emailErr := emailCmd.Output()
+
+	name := strings.TrimSpace(string(nameOutput))
+	email := strings.TrimSpace(string(emailOutput))
+
+	if nameErr != nil && emailErr != nil {
+		return ""
+	}
+	if name == "" && email == "" {
+		return ""
+	}
+	if email == "" {
+		return name
+	}
+	if name == "" {
+		return fmt.Sprintf("<%s>", email)
+	}
+	return fmt.Sprintf("%s <%s>", name, email)
+}
+
 // InitBare initializes a bare tin repository (no git, no working tree)
 // Bare repositories are used as remote repositories
 func InitBare(path string) (*Repository, error) {

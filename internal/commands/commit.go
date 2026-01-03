@@ -117,6 +117,7 @@ func Commit(args []string) error {
 
 	// Create commit
 	commit := model.NewTinCommit(message, staged, gitHash, parentCommitID)
+	commit.Author = repo.GitGetAuthor()
 
 	// Save commit
 	if err := repo.SaveCommit(commit); err != nil {

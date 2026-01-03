@@ -326,6 +326,7 @@ func completeMerge(repo *storage.Repository, state *storage.MergeState) error {
 		state.TargetCommitID,
 		state.SourceCommitID,
 	)
+	commit.Author = repo.GitGetAuthor()
 
 	if err := repo.SaveCommit(commit); err != nil {
 		return fmt.Errorf("failed to save merge commit: %w", err)
