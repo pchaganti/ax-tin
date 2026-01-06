@@ -2,7 +2,11 @@
 
 [![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://opensource.org/licenses/Apache-2.0) 
 
-Thread-based version control for conversational agentic coding. Wraps git, treating conversation threads as the primary unit of change.
+`tin` is git for AI coding conversations.
+
+Today, all real design work happens in conversations with AI agents, and those conversations disappear into local caches. `tin` turns those threads into first-class, version-controlled artifacts, permanently linked to the code they produced.
+
+`tin` fully wraps git, treating conversation threads as the primary unit of change and linking them to git commits.
 
 > [!WARNING]
 > This is a proof of concept, 100% vibe coded (this README.md is the only human-edited file in this repo!), and may not be suitable for all agentic coding workflows. See [contributing](#contributing) below if you want to support this project.
@@ -11,11 +15,11 @@ Thread-based version control for conversational agentic coding. Wraps git, treat
 
 - **Thread-based version control**: `tin` is a version control protocol and application for conversational agentic coding. It treats conversation threads as the primary unit of change, and provides a structural link between them and code changes (i.e., git commits).
 
-- **Git integration**: `tin` is built on top of git and fully replaces it in your agentic coding workflow. It manages your git state for you; all you worry about is which conversations (and associated changes) should be committed. See [all commands](COMMANDS.md).
+- **Git wrapper**: `tin` is built on top of git and fully replaces it in your agentic coding workflow. It manages your git state for you; all you worry about is which conversations (and associated changes) should be committed. `tin` uses familiar git commands (see [all commands](COMMANDS.md)).
 
 - **Built for vibe coding**: `tin` is designed to be used by devs and teams that do 95%+ of their coding via agents. Manual code edits and git operations are possible, but break the threads-as-source-of-truth model.
 
-- **Collaborative**: `tin` provides a central repository of the conversations across your whole team, a single record of the team's decisions.
+- **Collaborative**: `tin` provides a central repository of the conversations across your whole team and all agents, a single record of the team's decisions and the codebase's evolution.
 
 ## Why `tin`
 
@@ -23,47 +27,80 @@ Git retains the history of changes to the codebase.
 
 `tin` retains the human thoughts behind the code, the history of decisions that led to the code, and the provenance of the code.
 
-For the first time, developers that use coding agents are forced to write down the _thoughts_ behind their code before that code is written. But those thoughts only live in local agent caches today (and proprietary, fractured web services). `tin` is the first version control system to capture and preserve those thoughts _and_ how they resulted in the code's changes, for an entire development team.
+For the first time, developers that use coding agents are forced to write down the _design thinking_ behind their code before that code is written. But those thoughts only live in local agent caches today (and proprietary, fractured web services). `tin` is the first version control system to capture and preserve those thoughts _and_ how they resulted in the code's changes, for an entire development team.
+
+### What you get
+
+- **Code provenance**: See exactly which conversation produced each commit, including prompts, assistant responses, and tool calls.
+- **Team decision log**: A searchable history of how design decisions were made, across all agents and developers.
+- **Onboarding & reviews**: New engineers or reviewers can replay the threads behind complex features instead of guessing from diffs.
+- **Compliance & governance**: Keep an auditable record of AI involvement in your codebase.
+
+## How it works
+
+`tin` sits between your AI coding tool and git. It:
+
+- captures each conversation or session as a thread,
+- records which git changes each assistant message produced, and
+- lets you stage and commit whole threads (and their code changes) together.
+
+You still get a normal git repo, but every commit now has a linked thread explaining how and why it happened.
 
 ## Quickstart
 
 ```bash
 go install github.com/dadlerj/tin/cmd/tin@latest
 
+######################
+# If using Amp
+######################
+
+tin init                        # Initialize in a git repo
+amp                             # ... have a conversation
+tin amp pull                    # Pull the latest threads from ampcode.com
+tin status                      # See pending threads
+tin commit -m "Added feature"   # Commit threads + code together
+
+######################
+# If using Claude Code
+######################
+
 tin init                        # Initialize in a git repo
 tin hooks install               # Set up Claude Code integration
-claude                          # ... have a conversation in your agent of choice
+claude                          # ... have a conversation
 tin status                      # See pending threads
 tin commit -m "Added feature"   # Commit threads + code together
 ```
 
-## Getting started and the `tin` workflow
+## The full `tin` workflow
 
 1. **Download and install `tin`, and initialize your repository**
 
 Run `go install github.com/dadlerj/tin/cmd/tin@latest`
 
-Run `tin init` in your git repo.
+Run `tin init` in your new project folder or existing git repo.
 
-2. **Install your agent's `tin` bindings**
+2. **Install your agent's `tin` bindings** (Claude Code only)
 
-Today, `tin` only integrates with Claude Code. Run `tin hooks install` (with or without the `-g` global flag) to install hooks and slash commands for Claude Code.
+If using Claude Code, run `tin hooks install` (with or without the `-g` global flag) to install hooks and slash commands. The hooks will automatically track your conversations and code changes.
 
 3. **Code as normal in your agent**
 
-`tin` will automatically track your conversations and code changes.
+4. **Pull your latest threads from ampcode.com** (Amp only)
 
-4. **Stage and commit your changes using `tin`**
+If using Amp, run `tin amp pull` in your repo to import the latest (or N latest) threads into tin from ampcode.com. Imported threads are auto-staged for commit.
 
-Instead of `git add` and `git commit`, use `tin add` and `tin commit`.
+5. **Stage and commit your changes using `tin`**
+
+Instead of `git add` and `git commit`, use `tin add` and `tin commit`. You select threads (or portions of a thread) to stage, and `tin` commits both the code changes and the linked conversations.
 
 Push your changes to a `tin` remote (see `tin serve`) if you want to collaborate or backup your history. `tin push` and `tin pull` are supported. See more in the command documentation.
 
-5. **That's it! :tada:**
+**That's it! :tada:**
 
-`tin` will automatically track your agent conversations (and all versions of them, as they change) and the code changes associated with each one.
+`tin` will track your agent conversations (and all versions of them, as they change) and the code changes associated with each one.
 
-### Documentation
+### Commands documentation
 
 See [all `tin` commands](COMMANDS.md).
 
@@ -89,47 +126,6 @@ All `tin` commits are connected to git commits (if the git commit hash for a tin
 
 <img src="assets/tin-in-github.png" alt="Git commits with tin connectivity" width="500">
 
-### The `tin` control flow
-
-```mermaid
-sequenceDiagram
-      participant User
-      participant Agent as Agent<br/>(Claude Code, Amp, etc.)
-      participant Tin
-      participant Git
-
-      rect rgb(240, 248, 255)
-          Note over User, Git: Conversation Session
-          User->>Agent: Start conversation
-          Tin->>Tin: SessionStart → create thread
-
-          loop Discussion
-              User->>Agent: Send prompt
-              Tin->>Tin: Append human message
-              Agent->>Git: Make code changes
-              Agent->>User: Respond
-              Tin->>Tin: Append assistant message + git hash
-          end
-
-          User->>Agent: End session
-          Tin->>Tin: Auto-stage thread
-      end
-
-      rect rgb(255, 248, 240)
-          Note over User, Git: Commit Phase
-          User->>Tin: tin commit -m "message"
-          Tin->>Git: git commit (code changes)
-          Tin->>Tin: Create tin commit (thread refs)
-      end
-
-      rect rgb(240, 255, 240)
-          Note over User, Git: Push Phase
-          User->>Tin: tin push
-          Tin->>Git: git push (code)
-          Tin->>Tin: Push thread data to remote
-      end
-```
-
 ## Why the name "`tin`"?
 
 >**git** (plural gits)
@@ -152,4 +148,6 @@ sequenceDiagram
 
 `tin` is a proof of concept, 100% vibe coded, and may not be suitable for all agentic coding workflows. 
 
-I am not a professional developer and this was a holiday hobby project. If `tin` gets adopted, I fully intend to contribute it to an open source foundation. If you are interested in becoming a maintainer, please let me know.
+It started as a holiday hobby project. If `tin` gets adoption, I intend to contribute it to an open source foundation and build a proper maintainer group. If you are interested in helping shape that, please reach out or open an issue.
+
+If this direction resonates, ⭐ the repo and share feedback. This will help me prioritize where to take `tin` next.
