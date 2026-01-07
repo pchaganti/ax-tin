@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/tin-mascot.jpeg" alt="tin mascot" width="200">
+</p>
+
 # tin
 
 [![License: Apache](https://img.shields.io/badge/license-Apache%20License%202.0-blue)](https://opensource.org/licenses/Apache-2.0) 
